@@ -1,8 +1,9 @@
 const API_URL = 'http://localhost:8080';
 
-// Keep track of connected sites
+// Keep track of connected sites and pending requests
 let connectedSites = new Set();
 let currentWallet = null;
+let pendingRequests = new Map();
 
 // Load wallet from storage
 chrome.storage.local.get(['wallet'], ({ wallet }) => {
@@ -11,6 +12,7 @@ chrome.storage.local.get(['wallet'], ({ wallet }) => {
   }
 });
 
+// Listen for messages from content scripts and popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   switch (request.type) {
     case 'CREATE_WALLET':
@@ -44,6 +46,25 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'REQUEST_TRANSACTION':
       handleTransactionRequest(sender.tab?.id, sender.origin, request).then(sendResponse);
       return true;
+
+    case 'APPROVAL_RESPONSE':
+      const pendingRequest = pendingRequests.get(request.requestId);
+      if (pendingRequest) {
+        const { resolver } = pendingRequest;
+        if (resolver) {
+          resolver(request.approved);
+        }
+        pendingRequests.delete(request.requestId);
+        
+        // Update storage
+        chrome.storage.local.get(['pendingRequests'], ({ pendingRequests: storedRequests }) => {
+          if (storedRequests) {
+            delete storedRequests[request.requestId];
+            chrome.storage.local.set({ pendingRequests: storedRequests });
+          }
+        });
+      }
+      return false;
   }
 });
 
@@ -120,18 +141,23 @@ async function handleConnectRequest(tabId, origin) {
     return { error: 'No wallet available' };
   }
 
-  // Create popup to request permission
-  const approved = await requestApproval(tabId, {
-    type: 'connect',
-    site: origin
-  });
+  try {
+    // Create connection request
+    const requestId = Date.now().toString();
+    const approved = await requestApproval(requestId, {
+      type: 'connect',
+      origin
+    });
 
-  if (!approved) {
-    return { error: 'User rejected connection' };
+    if (!approved) {
+      return { error: 'User rejected connection' };
+    }
+
+    connectedSites.add(origin);
+    return { address: currentWallet.address };
+  } catch (error) {
+    return { error: error.message || 'Connection failed' };
   }
-
-  connectedSites.add(origin);
-  return { address: currentWallet.address };
 }
 
 async function handleTransactionRequest(tabId, origin, request) {
@@ -144,7 +170,7 @@ async function handleTransactionRequest(tabId, origin, request) {
   }
 
   // Create popup to request transaction approval
-  const approved = await requestApproval(tabId, {
+  const approved = await requestApproval(request.requestId, {
     type: 'transaction',
     site: origin,
     to: request.to,
@@ -158,24 +184,28 @@ async function handleTransactionRequest(tabId, origin, request) {
   return sendTransaction(currentWallet.privateKey, request.to, request.amount);
 }
 
-async function requestApproval(tabId, details) {
-  // Create a popup window for approval
-  const popup = await chrome.windows.create({
-    url: `html/approval.html?${new URLSearchParams(details)}`,
-    type: 'popup',
-    width: 360,
-    height: 400
-  });
-
+async function requestApproval(requestId, details) {
   return new Promise((resolve) => {
-    // Listen for the approval response
-    const listener = (message, sender) => {
-      if (message.type === 'APPROVAL_RESPONSE' && message.windowId === popup.id) {
-        chrome.runtime.onMessage.removeListener(listener);
-        chrome.windows.remove(popup.id);
-        resolve(message.approved);
-      }
-    };
-    chrome.runtime.onMessage.addListener(listener);
+    // Store request
+    pendingRequests.set(requestId, {
+      ...details,
+      resolver: resolve
+    });
+
+    // Store in local storage for persistence
+    chrome.storage.local.get(['pendingRequests'], ({ pendingRequests: storedRequests = {} }) => {
+      storedRequests[requestId] = details;
+      chrome.storage.local.set({ pendingRequests: storedRequests });
+    });
+
+    // Notify popup of new request
+    chrome.runtime.sendMessage({
+      type: 'NEW_CONNECTION_REQUEST',
+      requestId,
+      request: details
+    });
+
+    // Focus or open popup
+    chrome.action.openPopup();
   });
 } 

@@ -1,5 +1,8 @@
 let currentWallet = null;
 
+// Track pending requests
+let pendingRequests = new Map();
+
 document.addEventListener('DOMContentLoaded', async () => {
   // Load wallet from storage
   chrome.storage.local.get(['wallet'], ({ wallet }) => {
@@ -22,7 +25,27 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Alert close button listener
   document.querySelector('.alert-close').addEventListener('click', hideAlert);
+
+  // Initialize UI
+  initializeUI();
+  
+  // Check for pending requests
+  chrome.storage.local.get(['pendingRequests'], ({ pendingRequests: storedRequests }) => {
+    if (storedRequests) {
+      Object.entries(storedRequests).forEach(([id, request]) => {
+        addConnectionRequest(id, request);
+      });
+    }
+  });
 });
+
+function initializeUI() {
+  // Initialize the pending requests container
+  const requestTemplate = document.getElementById('request-template');
+  if (requestTemplate) {
+    requestTemplate.remove(); // Remove template from DOM
+  }
+}
 
 function truncateAddress(address) {
   if (!address) return '';
@@ -187,4 +210,87 @@ function copyAddress() {
       </svg>
     `;
   }, 2000);
-} 
+}
+
+// Handle connection request
+function addConnectionRequest(requestId, request) {
+  const pendingRequestsContainer = document.getElementById('pending-requests');
+  const template = document.getElementById('request-template');
+  
+  // If this is the first request, show the container
+  if (pendingRequests.size === 0) {
+    pendingRequestsContainer.classList.remove('hidden');
+  }
+  
+  // Create new request element
+  const requestElement = template.cloneNode(true);
+  requestElement.id = `request-${requestId}`;
+  requestElement.classList.remove('hidden');
+  
+  // Set site information
+  const siteIcon = requestElement.querySelector('.site-icon');
+  const siteName = requestElement.querySelector('.site-name');
+  siteIcon.src = `${request.origin}/favicon.ico`;
+  siteName.textContent = request.origin;
+  
+  // Add event listeners to buttons
+  const approveButton = requestElement.querySelector('.approve-button');
+  const rejectButton = requestElement.querySelector('.reject-button');
+  
+  approveButton.addEventListener('click', () => handleResponse(requestId, true));
+  rejectButton.addEventListener('click', () => handleResponse(requestId, false));
+  
+  // Add to pending requests
+  pendingRequests.set(requestId, {
+    element: requestElement,
+    request
+  });
+  
+  // Add to DOM
+  pendingRequestsContainer.appendChild(requestElement);
+}
+
+async function handleResponse(requestId, approved) {
+  const { element, request } = pendingRequests.get(requestId);
+  
+  // Disable buttons
+  const buttons = element.querySelectorAll('button');
+  buttons.forEach(button => button.disabled = true);
+  
+  try {
+    // Send response
+    await chrome.runtime.sendMessage({
+      type: 'APPROVAL_RESPONSE',
+      requestId,
+      approved
+    });
+    
+    // Remove request
+    element.remove();
+    pendingRequests.delete(requestId);
+    
+    // Hide container if no more requests
+    if (pendingRequests.size === 0) {
+      document.getElementById('pending-requests').classList.add('hidden');
+    }
+    
+    // Update storage
+    const { pendingRequests: storedRequests } = await chrome.storage.local.get(['pendingRequests']);
+    if (storedRequests) {
+      delete storedRequests[requestId];
+      await chrome.storage.local.set({ pendingRequests: storedRequests });
+    }
+  } catch (error) {
+    console.error('Failed to handle response:', error);
+    // Re-enable buttons on error
+    buttons.forEach(button => button.disabled = false);
+  }
+}
+
+// Listen for new connection requests
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'NEW_CONNECTION_REQUEST') {
+    addConnectionRequest(message.requestId, message.request);
+    sendResponse({ received: true });
+  }
+}); 

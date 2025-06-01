@@ -6,7 +6,8 @@
   "permissions": [
     "storage",
     "activeTab",
-    "tabs"
+    "tabs",
+    "windows"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -25,12 +26,22 @@
     "128": "images/icon128.png"
   },
   "background": {
-    "service_worker": "js/background.js"
+    "service_worker": "js/background.js",
+    "type": "module"
   },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
       "js": ["js/content.js"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "html/approval.html",
+        "js/inject.js"
+      ],
+      "matches": ["<all_urls>"]
     }
   ]
 } 

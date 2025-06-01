@@ -48,6 +48,19 @@
     .button-group button {
       flex: 1;
     }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .primary-button:disabled {
+      background: var(--primary-color);
+      opacity: 0.5;
+    }
+    .secondary-button:disabled {
+      border-color: var(--border-color);
+      color: var(--text-secondary);
+      opacity: 0.5;
+    }
   </style>
 </head>
 <body>

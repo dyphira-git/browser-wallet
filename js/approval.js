@@ -19,20 +19,39 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('tx-amount').textContent = `${params.get('amount')} DYP`;
   }
 
-  document.getElementById('approve').addEventListener('click', () => {
-    chrome.runtime.sendMessage({
-      type: 'APPROVAL_RESPONSE',
-      windowId: chrome.windows.WINDOW_ID_CURRENT,
-      approved: true
-    });
+  const approveButton = document.getElementById('approve');
+  const rejectButton = document.getElementById('reject');
+
+  function disableButtons() {
+    approveButton.disabled = true;
+    rejectButton.disabled = true;
+  }
+
+  async function sendResponseAndClose(approved) {
+    disableButtons();
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'APPROVAL_RESPONSE',
+        windowId: chrome.windows.WINDOW_ID_CURRENT,
+        approved
+      });
+      window.close();
+    } catch (error) {
+      console.error('Failed to send response:', error);
+      // Re-enable buttons if sending fails
+      approveButton.disabled = false;
+      rejectButton.disabled = false;
+    }
+  }
+
+  approveButton.addEventListener('click', () => {
+    approveButton.textContent = 'Approving...';
+    sendResponseAndClose(true);
   });
 
-  document.getElementById('reject').addEventListener('click', () => {
-    chrome.runtime.sendMessage({
-      type: 'APPROVAL_RESPONSE',
-      windowId: chrome.windows.WINDOW_ID_CURRENT,
-      approved: false
-    });
+  rejectButton.addEventListener('click', () => {
+    rejectButton.textContent = 'Rejecting...';
+    sendResponseAndClose(false);
   });
 });
 

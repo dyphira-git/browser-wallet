@@ -1,56 +1,74 @@
-// Inject Dyphira wallet provider
-window.dyphiraWallet = {
-  isConnected: false,
-  address: null,
+// Inject the detection code into the webpage
+const script = document.createElement('script');
+script.src = chrome.runtime.getURL('js/inject.js');
+(document.head || document.documentElement).appendChild(script);
 
-  async connect() {
-    try {
-      const response = await chrome.runtime.sendMessage({ type: 'CONNECT_WALLET' });
-      if (response.error) {
-        throw new Error(response.error);
-      }
-      this.isConnected = true;
-      this.address = response.address;
-      return { address: response.address };
-    } catch (error) {
-      throw new Error('Failed to connect wallet: ' + error.message);
-    }
-  },
+// Listen for messages from the webpage
+window.addEventListener('message', async (event) => {
+  if (event.source !== window) return;
+  const { type, detail } = event.data;
 
-  async sendTransaction(to, amount) {
-    if (!this.isConnected) {
-      throw new Error('Wallet not connected');
-    }
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: 'REQUEST_TRANSACTION',
-        to,
-        amount
-      });
-      if (response.error) {
-        throw new Error(response.error);
+  switch (type) {
+    case 'DYPHIRA_CONNECT':
+      try {
+        const response = await chrome.runtime.sendMessage({ 
+          type: 'CONNECT_WALLET'
+        });
+        window.postMessage({
+          type: 'DYPHIRA_CALLBACK',
+          callbackId: detail.callbackId,
+          response
+        }, '*');
+      } catch (error) {
+        window.postMessage({
+          type: 'DYPHIRA_CALLBACK',
+          callbackId: detail.callbackId,
+          response: { error: error.message || 'Connection failed' }
+        }, '*');
       }
-      return response;
-    } catch (error) {
-      throw new Error('Transaction failed: ' + error.message);
-    }
-  },
+      break;
 
-  async getBalance() {
-    if (!this.isConnected) {
-      throw new Error('Wallet not connected');
-    }
-    try {
-      const response = await chrome.runtime.sendMessage({ type: 'GET_BALANCE' });
-      if (response.error) {
-        throw new Error(response.error);
+    case 'DYPHIRA_SEND_TRANSACTION':
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: 'REQUEST_TRANSACTION',
+          to: detail.to,
+          amount: detail.amount
+        });
+        window.postMessage({
+          type: 'DYPHIRA_CALLBACK',
+          callbackId: detail.callbackId,
+          response
+        }, '*');
+      } catch (error) {
+        window.postMessage({
+          type: 'DYPHIRA_CALLBACK',
+          callbackId: detail.callbackId,
+          response: { error: error.message || 'Transaction failed' }
+        }, '*');
       }
-      return response.balance;
-    } catch (error) {
-      throw new Error('Failed to get balance: ' + error.message);
-    }
+      break;
+
+    case 'DYPHIRA_GET_BALANCE':
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: 'GET_BALANCE'
+        });
+        window.postMessage({
+          type: 'DYPHIRA_CALLBACK',
+          callbackId: detail.callbackId,
+          response
+        }, '*');
+      } catch (error) {
+        window.postMessage({
+          type: 'DYPHIRA_CALLBACK',
+          callbackId: detail.callbackId,
+          response: { error: error.message || 'Failed to get balance' }
+        }, '*');
+      }
+      break;
   }
-};
+});
 
-// Dispatch event to notify websites that Dyphira wallet is available
+// Notify that the wallet is ready
 window.dispatchEvent(new Event('dyphiraWalletLoaded')); 

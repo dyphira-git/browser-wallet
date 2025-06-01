@@ -4,6 +4,58 @@
   <title>Dyphira Wallet</title>
   <link rel="stylesheet" href="../css/popup.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    .connection-request {
+      padding: 16px;
+      border-radius: 8px;
+      background: var(--background);
+      margin-bottom: 16px;
+      border: 1px solid var(--border-color);
+    }
+    
+    .connection-request h2 {
+      margin: 0 0 12px 0;
+      font-size: 16px;
+      color: var(--text-primary);
+    }
+    
+    .site-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding: 12px;
+      background: var(--background-light);
+      border-radius: 6px;
+    }
+    
+    .site-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      background: var(--background);
+    }
+    
+    .site-name {
+      font-weight: 500;
+      word-break: break-all;
+      font-size: 14px;
+    }
+    
+    .request-buttons {
+      display: flex;
+      gap: 8px;
+    }
+    
+    .request-buttons button {
+      flex: 1;
+      padding: 8px 16px;
+    }
+    
+    #pending-requests {
+      margin-bottom: 16px;
+    }
+  </style>
 </head>
 <body>
   <div class="container">
@@ -20,6 +72,23 @@
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
         </button>
+      </div>
+    </div>
+
+    <!-- Connection Requests Section -->
+    <div id="pending-requests" class="hidden">
+      <!-- Template for connection requests -->
+      <div class="connection-request hidden" id="request-template">
+        <h2>Connection Request</h2>
+        <div class="site-info">
+          <img class="site-icon">
+          <div class="site-name"></div>
+        </div>
+        <p>This site is requesting to connect to your wallet.</p>
+        <div class="request-buttons">
+          <button class="secondary-button reject-button">Reject</button>
+          <button class="primary-button approve-button">Approve</button>
+        </div>
       </div>
     </div>
 
