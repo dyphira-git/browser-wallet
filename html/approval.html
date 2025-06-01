@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Dyphira Wallet - Approval Required</title>
+  <link rel="stylesheet" href="../css/popup.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    .container {
+      padding: 24px;
+    }
+    .site-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .site-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: var(--background);
+    }
+    .site-name {
+      font-weight: 500;
+      word-break: break-all;
+    }
+    .details {
+      background: var(--background);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 24px;
+    }
+    .details-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .details-row:last-child {
+      margin-bottom: 0;
+    }
+    .details-label {
+      color: var(--text-secondary);
+    }
+    .button-group {
+      display: flex;
+      gap: 12px;
+    }
+    .button-group button {
+      flex: 1;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="connect-request" class="hidden">
+      <h1>Connect Wallet</h1>
+      <div class="site-info">
+        <img id="site-icon" class="site-icon">
+        <div class="site-name" id="site-name"></div>
+      </div>
+      <p>This site is requesting to connect to your Dyphira wallet.</p>
+    </div>
+
+    <div id="transaction-request" class="hidden">
+      <h1>Approve Transaction</h1>
+      <div class="site-info">
+        <img id="tx-site-icon" class="site-icon">
+        <div class="site-name" id="tx-site-name"></div>
+      </div>
+      <div class="details">
+        <div class="details-row">
+          <span class="details-label">To:</span>
+          <span id="tx-to"></span>
+        </div>
+        <div class="details-row">
+          <span class="details-label">Amount:</span>
+          <span id="tx-amount"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="button-group">
+      <button id="reject" class="secondary-button">Reject</button>
+      <button id="approve" class="primary-button">Approve</button>
+    </div>
+  </div>
+  <script src="../js/approval.js"></script>
+</body>
+</html> 

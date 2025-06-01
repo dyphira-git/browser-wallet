@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Dyphira Wallet</title>
+  <link rel="stylesheet" href="../css/popup.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Dyphira Wallet</h1>
+    </header>
+    
+    <div id="alert-container" class="alert-container hidden">
+      <div class="alert">
+        <span class="alert-message"></span>
+        <button class="alert-close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div id="wallet-info" class="hidden">
+      <div class="card balance-section">
+        <div class="balance-amount">
+          <span id="balance">0</span>
+          <span class="currency">DYP</span>
+        </div>
+        <div class="balance-label">Current Balance</div>
+      </div>
+      
+      <div class="card address-section">
+        <div class="section-header">
+          <h2>Wallet Address</h2>
+          <button id="copy-address" class="icon-button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
+        </div>
+        <p id="address" class="address"></p>
+      </div>
+
+      <div class="card transaction-section">
+        <div class="section-header">
+          <h2>Send Coins</h2>
+        </div>
+        <div class="input-group">
+          <label for="recipient">Recipient Address</label>
+          <input type="text" id="recipient" placeholder="Enter recipient address">
+        </div>
+        <div class="input-group">
+          <label for="amount">Amount</label>
+          <div class="amount-input">
+            <input type="number" id="amount" placeholder="0.00">
+            <span class="currency-label">DYP</span>
+          </div>
+        </div>
+        <button id="send-transaction" class="primary-button">Send Transaction</button>
+      </div>
+
+      <div class="card deposit-section">
+        <div class="section-header">
+          <h2>Deposit to Dyphira</h2>
+        </div>
+        <div class="input-group">
+          <label for="deposit-amount">Amount to Deposit</label>
+          <div class="amount-input">
+            <input type="number" id="deposit-amount" placeholder="0.00">
+            <span class="currency-label">DYP</span>
+          </div>
+        </div>
+        <button id="deposit" class="primary-button">Deposit</button>
+      </div>
+    </div>
+
+    <div id="no-wallet" class="hidden">
+      <div class="card welcome-card">
+        <h2>Welcome to Dyphira</h2>
+        <p class="welcome-text">Get started by creating a new wallet or importing an existing one.</p>
+        <div class="wallet-actions">
+          <button id="create-wallet" class="primary-button">Create New Wallet</button>
+          <div class="divider">
+            <span>or</span>
+          </div>
+          <button id="import-wallet" class="secondary-button">Import Existing Wallet</button>
+        </div>
+      </div>
+      
+      <div id="import-section" class="card hidden">
+        <div class="section-header">
+          <h2>Import Wallet</h2>
+        </div>
+        <div class="input-group">
+          <label for="private-key">Private Key</label>
+          <textarea id="private-key" placeholder="Enter your private key"></textarea>
+        </div>
+        <button id="confirm-import" class="primary-button">Import Wallet</button>
+      </div>
+    </div>
+  </div>
+  <script src="../js/popup.js"></script>
+</body>
+</html> 
