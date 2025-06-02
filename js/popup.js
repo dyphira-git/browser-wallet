@@ -1,9 +1,16 @@
 let currentWallet = null;
+let requestTemplate = null;
 
 // Track pending requests
 let pendingRequests = new Map();
 
 document.addEventListener('DOMContentLoaded', async () => {
+  // Store the template and remove it from DOM
+  requestTemplate = document.getElementById('request-template');
+  if (requestTemplate) {
+    requestTemplate.remove();
+  }
+
   // Load wallet from storage
   chrome.storage.local.get(['wallet'], ({ wallet }) => {
     if (wallet) {
@@ -24,17 +31,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('deposit').addEventListener('click', deposit);
 
   // Alert close button listener
-  document.querySelector('.alert-close').addEventListener('click', hideAlert);
+  document.querySelector('.alert-close')?.addEventListener('click', hideAlert);
 
-  // Initialize UI
-  initializeUI();
-  
-  // Check for pending requests
-  chrome.storage.local.get(['pendingRequests'], ({ pendingRequests: storedRequests }) => {
-    if (storedRequests) {
-      Object.entries(storedRequests).forEach(([id, request]) => {
-        addConnectionRequest(id, request);
-      });
+  // Check for pending request
+  chrome.storage.local.get(['latestRequest'], ({ latestRequest }) => {
+    if (latestRequest) {
+      showConnectionRequest(latestRequest.id, latestRequest);
     }
   });
 });
@@ -43,7 +45,7 @@ function initializeUI() {
   // Initialize the pending requests container
   const requestTemplate = document.getElementById('request-template');
   if (requestTemplate) {
-    requestTemplate.remove(); // Remove template from DOM
+    requestTemplate.remove();
   }
 }
 
@@ -212,85 +214,128 @@ function copyAddress() {
   }, 2000);
 }
 
-// Handle connection request
-function addConnectionRequest(requestId, request) {
-  const pendingRequestsContainer = document.getElementById('pending-requests');
-  const template = document.getElementById('request-template');
-  
-  // If this is the first request, show the container
-  if (pendingRequests.size === 0) {
-    pendingRequestsContainer.classList.remove('hidden');
+function showConnectionRequest(requestId, request) {
+  if (!requestTemplate) {
+    console.error('Request template not found');
+    return;
   }
+
+  // Hide all main sections
+  document.getElementById('wallet-info')?.classList.add('hidden');
+  document.getElementById('no-wallet')?.classList.add('hidden');
   
-  // Create new request element
-  const requestElement = template.cloneNode(true);
+  // Show pending requests section
+  const pendingRequestsContainer = document.getElementById('pending-requests');
+  if (!pendingRequestsContainer) {
+    console.error('Pending requests container not found');
+    return;
+  }
+
+  // Clear any existing connection requests
+  const existingRequests = pendingRequestsContainer.querySelectorAll('.connection-request:not(#request-template)');
+  existingRequests.forEach(req => req.remove());
+  
+  // Show the container
+  pendingRequestsContainer.classList.remove('hidden');
+  
+  // Clone the template
+  const requestElement = requestTemplate.cloneNode(true);
   requestElement.id = `request-${requestId}`;
   requestElement.classList.remove('hidden');
   
   // Set site information
   const siteIcon = requestElement.querySelector('.site-icon');
   const siteName = requestElement.querySelector('.site-name');
-  siteIcon.src = `${request.origin}/favicon.ico`;
-  siteName.textContent = request.origin;
+  
+  if (siteIcon && siteName) {
+    try {
+      const siteUrl = new URL(request.origin);
+      siteIcon.src = `${siteUrl.origin}/favicon.ico`;
+      siteIcon.onerror = () => {
+        siteIcon.src = '../images/icon48.png'; // Fallback to extension icon
+      };
+      siteName.textContent = request.origin;
+    } catch (error) {
+      siteIcon.src = '../images/icon48.png'; // Fallback to extension icon
+      siteName.textContent = request.origin || 'Unknown Site';
+    }
+  }
   
   // Add event listeners to buttons
   const approveButton = requestElement.querySelector('.approve-button');
   const rejectButton = requestElement.querySelector('.reject-button');
   
-  approveButton.addEventListener('click', () => handleResponse(requestId, true));
-  rejectButton.addEventListener('click', () => handleResponse(requestId, false));
-  
-  // Add to pending requests
-  pendingRequests.set(requestId, {
-    element: requestElement,
-    request
-  });
-  
-  // Add to DOM
-  pendingRequestsContainer.appendChild(requestElement);
-}
-
-async function handleResponse(requestId, approved) {
-  const { element, request } = pendingRequests.get(requestId);
-  
-  // Disable buttons
-  const buttons = element.querySelectorAll('button');
-  buttons.forEach(button => button.disabled = true);
-  
-  try {
-    // Send response
-    await chrome.runtime.sendMessage({
-      type: 'APPROVAL_RESPONSE',
-      requestId,
-      approved
+  if (approveButton && rejectButton) {
+    approveButton.addEventListener('click', async () => {
+      approveButton.disabled = true;
+      rejectButton.disabled = true;
+      approveButton.textContent = 'Approving...';
+      
+      try {
+        await chrome.runtime.sendMessage({
+          type: 'APPROVAL_RESPONSE',
+          requestId: requestId,
+          approved: true
+        });
+        
+        // Remove the request element
+        requestElement.remove();
+        pendingRequestsContainer.classList.add('hidden');
+        
+        // Show appropriate view
+        if (currentWallet) {
+          showWalletInfo();
+        } else {
+          showNoWallet();
+        }
+      } catch (error) {
+        console.error('Error handling approval:', error);
+        approveButton.disabled = false;
+        rejectButton.disabled = false;
+        approveButton.textContent = 'Approve';
+        showAlert('Failed to approve connection', 'error');
+      }
     });
     
-    // Remove request
-    element.remove();
-    pendingRequests.delete(requestId);
-    
-    // Hide container if no more requests
-    if (pendingRequests.size === 0) {
-      document.getElementById('pending-requests').classList.add('hidden');
-    }
-    
-    // Update storage
-    const { pendingRequests: storedRequests } = await chrome.storage.local.get(['pendingRequests']);
-    if (storedRequests) {
-      delete storedRequests[requestId];
-      await chrome.storage.local.set({ pendingRequests: storedRequests });
-    }
-  } catch (error) {
-    console.error('Failed to handle response:', error);
-    // Re-enable buttons on error
-    buttons.forEach(button => button.disabled = false);
+    rejectButton.addEventListener('click', async () => {
+      approveButton.disabled = true;
+      rejectButton.disabled = true;
+      rejectButton.textContent = 'Rejecting...';
+      
+      try {
+        await chrome.runtime.sendMessage({
+          type: 'APPROVAL_RESPONSE',
+          requestId: requestId,
+          approved: false
+        });
+        
+        // Remove the request element
+        requestElement.remove();
+        pendingRequestsContainer.classList.add('hidden');
+        
+        // Show appropriate view
+        if (currentWallet) {
+          showWalletInfo();
+        } else {
+          showNoWallet();
+        }
+      } catch (error) {
+        console.error('Error handling rejection:', error);
+        approveButton.disabled = false;
+        rejectButton.disabled = false;
+        rejectButton.textContent = 'Reject';
+        showAlert('Failed to reject connection', 'error');
+      }
+    });
   }
+  
+  // Add to pending requests container
+  pendingRequestsContainer.appendChild(requestElement);
 }
 
 // Listen for new connection requests
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'NEW_CONNECTION_REQUEST') {
-    addConnectionRequest(message.requestId, message.request);
-    sendResponse({ received: true });
+    showConnectionRequest(message.requestId, message.request);
   }
 }); 

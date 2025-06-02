@@ -3,6 +3,9 @@ const script = document.createElement('script');
 script.src = chrome.runtime.getURL('js/inject.js');
 (document.head || document.documentElement).appendChild(script);
 
+// Keep track of pending callbacks
+const pendingCallbacks = new Map();
+
 // Listen for messages from the webpage
 window.addEventListener('message', async (event) => {
   if (event.source !== window) return;
@@ -11,13 +14,31 @@ window.addEventListener('message', async (event) => {
   switch (type) {
     case 'DYPHIRA_CONNECT':
       try {
-        const response = await chrome.runtime.sendMessage({ 
-          type: 'CONNECT_WALLET'
+        // Store the callback ID
+        const callbackId = detail.callbackId;
+        
+        // Create a promise to handle the response
+        const responsePromise = new Promise((resolve, reject) => {
+          pendingCallbacks.set(callbackId, { resolve, reject });
         });
+
+        // Send request to background
+        chrome.runtime.sendMessage({ 
+          type: 'CONNECT_WALLET',
+          origin: window.location.origin,
+          callbackId: callbackId
+        });
+
+        // Wait for response
+        const response = await responsePromise;
+        
         window.postMessage({
           type: 'DYPHIRA_CALLBACK',
-          callbackId: detail.callbackId,
-          response
+          callbackId: callbackId,
+          response: {
+            address: response.address,
+            error: response.error
+          }
         }, '*');
       } catch (error) {
         window.postMessage({
@@ -67,6 +88,17 @@ window.addEventListener('message', async (event) => {
         }, '*');
       }
       break;
+  }
+});
+
+// Listen for responses from the background script
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'CONNECT_RESPONSE' && message.callbackId) {
+    const callback = pendingCallbacks.get(message.callbackId);
+    if (callback) {
+      callback.resolve(message);
+      pendingCallbacks.delete(message.callbackId);
+    }
   }
 });
 

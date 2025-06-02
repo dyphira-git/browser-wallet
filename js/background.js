@@ -40,7 +40,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
 
     case 'CONNECT_WALLET':
-      handleConnectRequest(sender.tab?.id, sender.origin).then(sendResponse);
+      handleConnectRequest(sender.tab?.id, request.origin, request.callbackId).then(sendResponse);
       return true;
 
     case 'REQUEST_TRANSACTION':
@@ -49,21 +49,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     case 'APPROVAL_RESPONSE':
       const pendingRequest = pendingRequests.get(request.requestId);
-      if (pendingRequest) {
-        const { resolver } = pendingRequest;
-        if (resolver) {
-          resolver(request.approved);
-        }
-        pendingRequests.delete(request.requestId);
-        
-        // Update storage
-        chrome.storage.local.get(['pendingRequests'], ({ pendingRequests: storedRequests }) => {
-          if (storedRequests) {
-            delete storedRequests[request.requestId];
-            chrome.storage.local.set({ pendingRequests: storedRequests });
-          }
-        });
+      if (pendingRequest && pendingRequest.resolver) {
+        pendingRequest.resolver(request.approved);
       }
+      pendingRequests.delete(request.requestId);
       return false;
   }
 });
@@ -136,7 +125,7 @@ async function depositToDyphira(privateKey, amount) {
   return sendTransaction(privateKey, DYPHIRA_WALLET, amount);
 }
 
-async function handleConnectRequest(tabId, origin) {
+async function handleConnectRequest(tabId, origin, callbackId) {
   if (!currentWallet) {
     return { error: 'No wallet available' };
   }
@@ -144,19 +133,66 @@ async function handleConnectRequest(tabId, origin) {
   try {
     // Create connection request
     const requestId = Date.now().toString();
-    const approved = await requestApproval(requestId, {
-      type: 'connect',
-      origin
+    
+    // Create a promise that will be resolved when the user responds
+    const response = await new Promise((resolve) => {
+      pendingRequests.set(requestId, {
+        type: 'connect',
+        origin,
+        resolver: resolve,
+        callbackId // Store the callback ID
+      });
+
+      // Store only the latest request
+      chrome.storage.local.set({
+        latestRequest: { id: requestId, type: 'connect', origin }
+      });
+
+      // Set badge to indicate pending request
+      chrome.action.setBadgeText({ text: '1' });
+      chrome.action.setBadgeBackgroundColor({ color: '#FF0000' });
     });
 
-    if (!approved) {
+    // Clear badge when request is handled
+    chrome.action.setBadgeText({ text: '' });
+
+    if (!response) {
+      // Send response back to content script
+      chrome.tabs.sendMessage(tabId, {
+        type: 'CONNECT_RESPONSE',
+        callbackId,
+        error: 'User rejected connection'
+      });
       return { error: 'User rejected connection' };
     }
 
+    // Add to connected sites if approved
     connectedSites.add(origin);
+    
+    // Send successful response back to content script
+    chrome.tabs.sendMessage(tabId, {
+      type: 'CONNECT_RESPONSE',
+      callbackId,
+      address: currentWallet.address
+    });
+    
     return { address: currentWallet.address };
   } catch (error) {
+    console.error('Connection error:', error);
+    // Clear badge on error
+    chrome.action.setBadgeText({ text: '' });
+    
+    // Send error response back to content script
+    chrome.tabs.sendMessage(tabId, {
+      type: 'CONNECT_RESPONSE',
+      callbackId,
+      error: error.message || 'Connection failed'
+    });
+    
     return { error: error.message || 'Connection failed' };
+  } finally {
+    // Clear the latest request when done
+    chrome.storage.local.remove('latestRequest');
   }
 }
 

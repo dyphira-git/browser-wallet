@@ -6,17 +6,19 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     .connection-request {
-      padding: 16px;
-      border-radius: 8px;
+      padding: 20px;
+      border-radius: 12px;
       background: var(--background);
       margin-bottom: 16px;
       border: 1px solid var(--border-color);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     }
     
     .connection-request h2 {
-      margin: 0 0 12px 0;
-      font-size: 16px;
+      margin: 0 0 16px 0;
+      font-size: 18px;
       color: var(--text-primary);
+      font-weight: 600;
     }
     
     .site-info {
@@ -24,37 +26,57 @@
       align-items: center;
       gap: 12px;
       margin-bottom: 16px;
-      padding: 12px;
+      padding: 16px;
       background: var(--background-light);
-      border-radius: 6px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
     }
     
     .site-icon {
       width: 32px;
       height: 32px;
-      border-radius: 6px;
+      border-radius: 8px;
       background: var(--background);
+      object-fit: contain;
+      padding: 4px;
     }
     
     .site-name {
       font-weight: 500;
       word-break: break-all;
       font-size: 14px;
+      color: var(--text-primary);
+    }
+    
+    .connection-request p {
+      margin: 0 0 20px 0;
+      color: var(--text-secondary);
+      font-size: 14px;
+      line-height: 1.5;
     }
     
     .request-buttons {
       display: flex;
-      gap: 8px;
+      gap: 12px;
     }
     
     .request-buttons button {
       flex: 1;
-      padding: 8px 16px;
+      padding: 10px 16px;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+    
+    .request-buttons button:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
     }
     
     #pending-requests {
-      margin-bottom: 16px;
+      margin: 16px 0;
     }
+
+    /* Rest of your existing styles */
   </style>
 </head>
 <body>
