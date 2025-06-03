@@ -5,10 +5,13 @@ let connectedSites = new Set();
 let currentWallet = null;
 let pendingRequests = new Map();
 
-// Load wallet from storage
-chrome.storage.local.get(['wallet'], ({ wallet }) => {
+// Load wallet and connected sites from storage
+chrome.storage.local.get(['wallet', 'connectedSites'], ({ wallet, connectedSites: storedSites }) => {
   if (wallet) {
     currentWallet = wallet;
+  }
+  if (storedSites) {
+    connectedSites = new Set(storedSites);
   }
 });
 
@@ -20,7 +23,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
 
     case 'IMPORT_WALLET':
-      importWallet(request.privateKey).then(sendResponse);
+      importWallet(request.private_key).then(sendResponse);
       return true;
 
     case 'GET_BALANCE':
@@ -32,11 +35,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
 
     case 'SEND_TRANSACTION':
-      sendTransaction(request.privateKey, request.to, request.amount).then(sendResponse);
+      sendTransaction(request.private_key, request.to, request.amount).then(sendResponse);
       return true;
 
     case 'DEPOSIT':
-      depositToDyphira(request.privateKey, request.amount).then(sendResponse);
+      depositToDyphira(request.private_key, request.amount).then(sendResponse);
       return true;
 
     case 'CONNECT_WALLET':
@@ -45,6 +48,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     case 'REQUEST_TRANSACTION':
       handleTransactionRequest(sender.tab?.id, sender.origin, request).then(sendResponse);
+      return true;
+
+    case 'DISCONNECT_SITE':
+      disconnectSite(request.origin).then(() => sendResponse({ success: true }));
       return true;
 
     case 'APPROVAL_RESPONSE':
@@ -59,7 +66,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 async function createWallet() {
   try {
-    const response = await fetch(`${API_URL}/wallet/new`, {
+    const response = await fetch(`${API_URL}/wallet`, {
       method: 'POST'
     });
     const wallet = await response.json();
@@ -71,14 +78,14 @@ async function createWallet() {
   }
 }
 
-async function importWallet(privateKey) {
+async function importWallet(private_key) {
   try {
     const response = await fetch(`${API_URL}/wallet/import`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ private_key: privateKey })
+      body: JSON.stringify({ private_key: private_key })
     });
     return await response.json();
   } catch (error) {
@@ -95,16 +102,16 @@ async function getBalance(address) {
   }
 }
 
-async function sendTransaction(privateKey, to, amount) {
+async function sendTransaction(private_key, to, amount) {
   try {
-    const response = await fetch(`${API_URL}/transaction/new`, {
+    const response = await fetch(`${API_URL}/transaction`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        private_key: privateKey,
-        to: to,
+        private_key: private_key,
+        to_address: to,
         amount: parseInt(amount)
       })
     });
@@ -113,16 +120,17 @@ async function sendTransaction(privateKey, to, amount) {
       throw new Error('Transaction failed');
     }
     
-    return { success: true };
+    const result = await response.json();
+    return { success: true, details: result.details };
   } catch (error) {
     return { error: error.message };
   }
 }
 
-async function depositToDyphira(privateKey, amount) {
+async function depositToDyphira(private_key, amount) {
   // Using the Dyphira platform wallet address for deposits
   const DYPHIRA_WALLET = 'dyphira_platform_wallet_address';
-  return sendTransaction(privateKey, DYPHIRA_WALLET, amount);
+  return sendTransaction(private_key, DYPHIRA_WALLET, amount);
 }
 
 async function handleConnectRequest(tabId, origin, callbackId) {
@@ -168,6 +176,8 @@ async function handleConnectRequest(tabId, origin, callbackId) {
 
     // Add to connected sites if approved
     connectedSites.add(origin);
+    // Persist connected sites to storage
+    chrome.storage.local.set({ connectedSites: Array.from(connectedSites) });
     
     // Send successful response back to content script
     chrome.tabs.sendMessage(tabId, {
@@ -205,19 +215,57 @@ async function handleTransactionRequest(tabId, origin, request) {
     return { error: 'No wallet available' };
   }
 
-  // Create popup to request transaction approval
-  const approved = await requestApproval(request.requestId, {
-    type: 'transaction',
-    site: origin,
-    to: request.to,
-    amount: request.amount
-  });
+  try {
+    // Create transaction request
+    const requestId = Date.now().toString();
+    
+    // Create a promise that will be resolved when the user responds
+    const approved = await new Promise((resolve) => {
+      pendingRequests.set(requestId, {
+        type: 'transaction',
+        site: origin,
+        to: request.to,
+        amount: request.amount,
+        resolver: resolve
+      });
 
-  if (!approved) {
-    return { error: 'User rejected transaction' };
+      // Store the latest request
+      chrome.storage.local.set({
+        latestRequest: {
+          id: requestId,
+          type: 'transaction',
+          site: origin,
+          to: request.to,
+          amount: request.amount
+        }
+      });
+
+      // Set badge to indicate pending request
+      chrome.action.setBadgeText({ text: '1' });
+      chrome.action.setBadgeBackgroundColor({ color: '#FF0000' });
+
+      // Open popup to show the request
+      chrome.action.openPopup();
+    });
+
+    // Clear badge when request is handled
+    chrome.action.setBadgeText({ text: '' });
+
+    if (!approved) {
+      return { error: 'User rejected transaction' };
+    }
+
+    // If approved, send the transaction
+    return sendTransaction(currentWallet.private_key, request.to, request.amount);
+  } catch (error) {
+    console.error('Transaction error:', error);
+    // Clear badge on error
+    chrome.action.setBadgeText({ text: '' });
+    return { error: error.message || 'Transaction failed' };
+  } finally {
+    // Clear the latest request when done
+    chrome.storage.local.remove('latestRequest');
   }
-
-  return sendTransaction(currentWallet.privateKey, request.to, request.amount);
 }
 
 async function requestApproval(requestId, details) {
@@ -244,4 +292,10 @@ async function requestApproval(requestId, details) {
     // Focus or open popup
     chrome.action.openPopup();
   });
+}
+
+// Add a function to disconnect a site
+async function disconnectSite(origin) {
+  connectedSites.delete(origin);
+  await chrome.storage.local.set({ connectedSites: Array.from(connectedSites) });
 } 

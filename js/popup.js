@@ -1,14 +1,19 @@
 let currentWallet = null;
 let requestTemplate = null;
+let transactionRequestTemplate = null;
 
 // Track pending requests
 let pendingRequests = new Map();
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // Store the template and remove it from DOM
+  // Store the templates and remove them from DOM
   requestTemplate = document.getElementById('request-template');
+  transactionRequestTemplate = document.getElementById('transaction-request-template');
   if (requestTemplate) {
     requestTemplate.remove();
+  }
+  if (transactionRequestTemplate) {
+    transactionRequestTemplate.remove();
   }
 
   // Load wallet from storage
@@ -28,7 +33,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('confirm-import').addEventListener('click', importWallet);
   document.getElementById('copy-address').addEventListener('click', copyAddress);
   document.getElementById('send-transaction').addEventListener('click', sendTransaction);
-  document.getElementById('deposit').addEventListener('click', deposit);
+  // document.getElementById('deposit').addEventListener('click', deposit);
 
   // Alert close button listener
   document.querySelector('.alert-close')?.addEventListener('click', hideAlert);
@@ -36,7 +41,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Check for pending request
   chrome.storage.local.get(['latestRequest'], ({ latestRequest }) => {
     if (latestRequest) {
-      showConnectionRequest(latestRequest.id, latestRequest);
+      if (latestRequest.type === 'connect') {
+        showConnectionRequest(latestRequest.id, latestRequest);
+      } else if (latestRequest.type === 'transaction') {
+        showTransactionRequest(latestRequest.id, latestRequest);
+      }
     }
   });
 });
@@ -105,15 +114,15 @@ async function createWallet() {
 }
 
 async function importWallet() {
-  const privateKey = document.getElementById('private-key').value.trim();
-  if (!privateKey) {
+  const private_key = document.getElementById('private-key').value.trim();
+  if (!private_key) {
     showAlert('Please enter a private key', 'error');
     return;
   }
 
   const response = await chrome.runtime.sendMessage({
     type: 'IMPORT_WALLET',
-    privateKey
+    private_key
   });
 
   if (response.error) {
@@ -123,7 +132,7 @@ async function importWallet() {
 
   currentWallet = {
     address: response.address,
-    privateKey: privateKey
+    private_key: private_key
   };
   
   chrome.storage.local.set({ wallet: currentWallet });
@@ -155,9 +164,11 @@ async function sendTransaction() {
     return;
   }
 
+  console.log("currentWallet", currentWallet);
+
   const response = await chrome.runtime.sendMessage({
     type: 'SEND_TRANSACTION',
-    privateKey: currentWallet.privateKey,
+    private_key: currentWallet.private_key,
     to,
     amount
   });
@@ -181,7 +192,7 @@ async function deposit() {
 
   const response = await chrome.runtime.sendMessage({
     type: 'DEPOSIT',
-    privateKey: currentWallet.privateKey,
+    private_key: currentWallet.private_key,
     amount
   });
 
@@ -214,6 +225,102 @@ function copyAddress() {
   }, 2000);
 }
 
+function showTransactionRequest(requestId, request) {
+  if (!transactionRequestTemplate) {
+    console.error('Transaction request template not found');
+    return;
+  }
+
+  // Hide all main sections
+  document.getElementById('wallet-info')?.classList.add('hidden');
+  document.getElementById('no-wallet')?.classList.add('hidden');
+  
+  // Show pending requests section
+  const pendingRequestsContainer = document.getElementById('pending-requests');
+  if (!pendingRequestsContainer) {
+    console.error('Pending requests container not found');
+    return;
+  }
+
+  // Clear any existing requests
+  const existingRequests = pendingRequestsContainer.querySelectorAll('.connection-request:not(#request-template):not(#transaction-request-template)');
+  existingRequests.forEach(req => req.remove());
+  
+  // Show the container
+  pendingRequestsContainer.classList.remove('hidden');
+  
+  // Clone the template
+  const requestElement = transactionRequestTemplate.cloneNode(true);
+  requestElement.id = `request-${requestId}`;
+  requestElement.classList.remove('hidden');
+  
+  // Set site information
+  const siteIcon = requestElement.querySelector('.site-icon');
+  const siteName = requestElement.querySelector('.site-name');
+  
+  // Try to get the site favicon
+  siteIcon.src = `https://www.google.com/s2/favicons?domain=${request.site}&sz=32`;
+  siteIcon.onerror = () => {
+    siteIcon.src = '../images/default-site-icon.png';
+  };
+  siteName.textContent = request.site;
+
+  // Set transaction details
+  requestElement.querySelector('.address-value').textContent = request.to;
+  requestElement.querySelector('.amount-value').textContent = `${request.amount} DYP`;
+
+  // Add event listeners to buttons
+  const approveButton = requestElement.querySelector('.approve-button');
+  const rejectButton = requestElement.querySelector('.reject-button');
+
+  approveButton.addEventListener('click', async () => {
+    // Send approval response
+    await chrome.runtime.sendMessage({
+      type: 'APPROVAL_RESPONSE',
+      requestId: requestId,
+      approved: true
+    });
+
+    // Remove the request element
+    requestElement.remove();
+
+    // Show wallet info if no more requests
+    if (!pendingRequestsContainer.querySelector('.connection-request:not(.hidden)')) {
+      pendingRequestsContainer.classList.add('hidden');
+      if (currentWallet) {
+        showWalletInfo();
+      } else {
+        showNoWallet();
+      }
+    }
+  });
+
+  rejectButton.addEventListener('click', async () => {
+    // Send rejection response
+    await chrome.runtime.sendMessage({
+      type: 'APPROVAL_RESPONSE',
+      requestId: requestId,
+      approved: false
+    });
+
+    // Remove the request element
+    requestElement.remove();
+
+    // Show wallet info if no more requests
+    if (!pendingRequestsContainer.querySelector('.connection-request:not(.hidden)')) {
+      pendingRequestsContainer.classList.add('hidden');
+      if (currentWallet) {
+        showWalletInfo();
+      } else {
+        showNoWallet();
+      }
+    }
+  });
+
+  // Add the request element to the container
+  pendingRequestsContainer.appendChild(requestElement);
+}
+
 function showConnectionRequest(requestId, request) {
   if (!requestTemplate) {
     console.error('Request template not found');
@@ -231,8 +338,8 @@ function showConnectionRequest(requestId, request) {
     return;
   }
 
-  // Clear any existing connection requests
-  const existingRequests = pendingRequestsContainer.querySelectorAll('.connection-request:not(#request-template)');
+  // Clear any existing requests
+  const existingRequests = pendingRequestsContainer.querySelectorAll('.connection-request:not(#request-template):not(#transaction-request-template)');
   existingRequests.forEach(req => req.remove());
   
   // Show the container
@@ -247,89 +354,62 @@ function showConnectionRequest(requestId, request) {
   const siteIcon = requestElement.querySelector('.site-icon');
   const siteName = requestElement.querySelector('.site-name');
   
-  if (siteIcon && siteName) {
-    try {
-      const siteUrl = new URL(request.origin);
-      siteIcon.src = `${siteUrl.origin}/favicon.ico`;
-      siteIcon.onerror = () => {
-        siteIcon.src = '../images/icon48.png'; // Fallback to extension icon
-      };
-      siteName.textContent = request.origin;
-    } catch (error) {
-      siteIcon.src = '../images/icon48.png'; // Fallback to extension icon
-      siteName.textContent = request.origin || 'Unknown Site';
-    }
-  }
-  
+  // Try to get the site favicon
+  siteIcon.src = `https://www.google.com/s2/favicons?domain=${request.origin}&sz=32`;
+  siteIcon.onerror = () => {
+    siteIcon.src = '../images/default-site-icon.png';
+  };
+  siteName.textContent = request.origin;
+
   // Add event listeners to buttons
   const approveButton = requestElement.querySelector('.approve-button');
   const rejectButton = requestElement.querySelector('.reject-button');
-  
-  if (approveButton && rejectButton) {
-    approveButton.addEventListener('click', async () => {
-      approveButton.disabled = true;
-      rejectButton.disabled = true;
-      approveButton.textContent = 'Approving...';
-      
-      try {
-        await chrome.runtime.sendMessage({
-          type: 'APPROVAL_RESPONSE',
-          requestId: requestId,
-          approved: true
-        });
-        
-        // Remove the request element
-        requestElement.remove();
-        pendingRequestsContainer.classList.add('hidden');
-        
-        // Show appropriate view
-        if (currentWallet) {
-          showWalletInfo();
-        } else {
-          showNoWallet();
-        }
-      } catch (error) {
-        console.error('Error handling approval:', error);
-        approveButton.disabled = false;
-        rejectButton.disabled = false;
-        approveButton.textContent = 'Approve';
-        showAlert('Failed to approve connection', 'error');
-      }
+
+  approveButton.addEventListener('click', async () => {
+    // Send approval response
+    await chrome.runtime.sendMessage({
+      type: 'APPROVAL_RESPONSE',
+      requestId: requestId,
+      approved: true
     });
-    
-    rejectButton.addEventListener('click', async () => {
-      approveButton.disabled = true;
-      rejectButton.disabled = true;
-      rejectButton.textContent = 'Rejecting...';
-      
-      try {
-        await chrome.runtime.sendMessage({
-          type: 'APPROVAL_RESPONSE',
-          requestId: requestId,
-          approved: false
-        });
-        
-        // Remove the request element
-        requestElement.remove();
-        pendingRequestsContainer.classList.add('hidden');
-        
-        // Show appropriate view
-        if (currentWallet) {
-          showWalletInfo();
-        } else {
-          showNoWallet();
-        }
-      } catch (error) {
-        console.error('Error handling rejection:', error);
-        approveButton.disabled = false;
-        rejectButton.disabled = false;
-        rejectButton.textContent = 'Reject';
-        showAlert('Failed to reject connection', 'error');
+
+    // Remove the request element
+    requestElement.remove();
+
+    // Show wallet info if no more requests
+    if (!pendingRequestsContainer.querySelector('.connection-request:not(.hidden)')) {
+      pendingRequestsContainer.classList.add('hidden');
+      if (currentWallet) {
+        showWalletInfo();
+      } else {
+        showNoWallet();
       }
+    }
+  });
+
+  rejectButton.addEventListener('click', async () => {
+    // Send rejection response
+    await chrome.runtime.sendMessage({
+      type: 'APPROVAL_RESPONSE',
+      requestId: requestId,
+      approved: false
     });
-  }
-  
-  // Add to pending requests container
+
+    // Remove the request element
+    requestElement.remove();
+
+    // Show wallet info if no more requests
+    if (!pendingRequestsContainer.querySelector('.connection-request:not(.hidden)')) {
+      pendingRequestsContainer.classList.add('hidden');
+      if (currentWallet) {
+        showWalletInfo();
+      } else {
+        showNoWallet();
+      }
+    }
+  });
+
+  // Add the request element to the container
   pendingRequestsContainer.appendChild(requestElement);
 }
 

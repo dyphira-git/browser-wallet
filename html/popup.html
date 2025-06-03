@@ -72,6 +72,43 @@
       cursor: not-allowed;
     }
     
+    .transaction-details {
+      background: var(--background-light);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 20px;
+      border: 1px solid var(--border-color);
+    }
+    
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+    }
+    
+    .detail-row:not(:last-child) {
+      border-bottom: 1px solid var(--border-color);
+    }
+    
+    .detail-row .label {
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+    
+    .detail-row .value {
+      color: var(--text-primary);
+      font-size: 14px;
+      font-weight: 500;
+      word-break: break-all;
+      text-align: right;
+      max-width: 60%;
+    }
+    
+    .address-value {
+      font-family: monospace;
+    }
+    
     #pending-requests {
       margin: 16px 0;
     }
@@ -107,6 +144,29 @@
           <div class="site-name"></div>
         </div>
         <p>This site is requesting to connect to your wallet.</p>
+        <div class="request-buttons">
+          <button class="secondary-button reject-button">Reject</button>
+          <button class="primary-button approve-button">Approve</button>
+        </div>
+      </div>
+
+      <!-- Template for transaction requests -->
+      <div class="connection-request hidden" id="transaction-request-template">
+        <h2>Transaction Request</h2>
+        <div class="site-info">
+          <img class="site-icon">
+          <div class="site-name"></div>
+        </div>
+        <div class="transaction-details">
+          <div class="detail-row">
+            <span class="label">To Address:</span>
+            <span class="value address-value"></span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Amount:</span>
+            <span class="value amount-value"></span>
+          </div>
+        </div>
         <div class="request-buttons">
           <button class="secondary-button reject-button">Reject</button>
           <button class="primary-button approve-button">Approve</button>
@@ -153,7 +213,7 @@
         </div>
         <button id="send-transaction" class="primary-button">Send Transaction</button>
       </div>
-
+<!-- 
       <div class="card deposit-section">
         <div class="section-header">
           <h2>Deposit to Dyphira</h2>
@@ -166,7 +226,7 @@
           </div>
         </div>
         <button id="deposit" class="primary-button">Deposit</button>
-      </div>
+      </div> -->
     </div>
 
     <div id="no-wallet" class="hidden">
