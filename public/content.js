@@ -1,6 +1,6 @@
 // Inject the detection code into the webpage
 const script = document.createElement('script');
-script.src = chrome.runtime.getURL('js/inject.js');
+script.src = chrome.runtime.getURL('inject.js');
 (document.head || document.documentElement).appendChild(script);
 
 // Keep track of pending callbacks
@@ -35,10 +35,9 @@ window.addEventListener('message', async (event) => {
         window.postMessage({
           type: 'DYPHIRA_CALLBACK',
           callbackId: callbackId,
-          response: {
-            address: response.address,
-            error: response.error
-          }
+          response: response.error ? 
+            { error: response.error } : 
+            { address: response.address }
         }, '*');
       } catch (error) {
         window.postMessage({
@@ -54,7 +53,8 @@ window.addEventListener('message', async (event) => {
         const response = await chrome.runtime.sendMessage({
           type: 'REQUEST_TRANSACTION',
           to: detail.to,
-          amount: detail.amount
+          amount: detail.amount,
+          origin: window.location.origin
         });
         window.postMessage({
           type: 'DYPHIRA_CALLBACK',
@@ -73,12 +73,15 @@ window.addEventListener('message', async (event) => {
     case 'DYPHIRA_GET_BALANCE':
       try {
         const response = await chrome.runtime.sendMessage({
-          type: 'GET_BALANCE'
+          type: 'GET_BALANCE',
+          origin: window.location.origin
         });
         window.postMessage({
           type: 'DYPHIRA_CALLBACK',
           callbackId: detail.callbackId,
-          response
+          response: response.error ? 
+            { error: response.error } : 
+            { balance: response.balance }
         }, '*');
       } catch (error) {
         window.postMessage({
@@ -100,7 +103,4 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       pendingCallbacks.delete(message.callbackId);
     }
   }
-});
-
-// Notify that the wallet is ready
-window.dispatchEvent(new Event('dyphiraWalletLoaded')); 
+}); 

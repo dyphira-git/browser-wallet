@@ -18,11 +18,10 @@ window.dyphiraWallet = {
         new Promise((resolve, reject) => {
           const id = callbackId++;
           
-          // Set up timeout
           timeoutId = setTimeout(() => {
             callbacks.delete(id);
             reject(new Error('Connection request timed out'));
-          }, 30000); // 30 second timeout
+          }, 30000);
 
           callbacks.set(id, {
             resolve: (response) => {
