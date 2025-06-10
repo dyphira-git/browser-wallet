@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dyphira Wallet Example</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            background-color: #f5f5f5;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #dff0d8;
+            color: #3c763d;
+            border: 1px solid #d6e9c6;
+        }
+        .error {
+            background-color: #f2dede;
+            color: #a94442;
+            border: 1px solid #ebccd1;
+        }
+        .info {
+            background-color: #d9edf7;
+            color: #31708f;
+            border: 1px solid #bce8f1;
+        }
+        #walletInfo {
+            display: none;
+            margin-top: 20px;
+        }
+        .balance {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4CAF50;
+            margin: 10px 0;
+        }
+        .address {
+            word-break: break-all;
+            background-color: #fff;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        .warning {
+            background-color: #fcf8e3;
+            color: #8a6d3b;
+            border: 1px solid #faebcc;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Dyphira Wallet Example</h1>
+    
+    <div class="container">
+        <h2>Wallet Connection</h2>
+        <div id="noWalletWarning" class="warning">
+            No wallet found. Please create or import a wallet in the Dyphira extension first.
+        </div>
+        <button id="connectBtn" disabled>Connect Wallet</button>
+        <button id="getBalanceBtn" disabled>Get Balance</button>
+        <button id="disconnectBtn" disabled>Disconnect</button>
+        
+        <div id="status"></div>
+        
+        <div id="walletInfo">
+            <h3>Wallet Information</h3>
+            <p><strong>Address:</strong></p>
+            <p class="address" id="walletAddress"></p>
+            <p><strong>Balance:</strong></p>
+            <p class="balance" id="walletBalance">0 DYP</p>
+
+            <div class="transaction-form">
+                <h3>Send Transaction</h3>
+                <div class="form-group">
+                    <label for="recipientAddress">Recipient Address:</label>
+                    <input type="text" id="recipientAddress" placeholder="Enter recipient address" style="width: 100%; padding: 8px; margin: 5px 0;">
+                </div>
+                <div class="form-group">
+                    <label for="amount">Amount (DYP):</label>
+                    <input type="number" id="amount" placeholder="Enter amount" step="0.000001" min="0" style="width: 200px; padding: 8px; margin: 5px 0;">
+                </div>
+                <button id="sendBtn" disabled>Send DYP</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let wallet = null;
+        const connectBtn = document.getElementById('connectBtn');
+        const getBalanceBtn = document.getElementById('getBalanceBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const sendBtn = document.getElementById('sendBtn');
+        const status = document.getElementById('status');
+        const noWalletWarning = document.getElementById('noWalletWarning');
+
+        function updateStatus(message, type) {
+            status.textContent = message;
+            status.className = type;
+        }
+
+        function enableWalletButtons(enabled) {
+            getBalanceBtn.disabled = !enabled;
+            disconnectBtn.disabled = !enabled;
+            sendBtn.disabled = !enabled;
+            connectBtn.disabled = enabled;
+        }
+
+        // Wait for the wallet to be injected
+        window.addEventListener('dyphiraWalletLoaded', () => {
+            console.log('Dyphira wallet detected');
+            wallet = window.dyphiraWallet;
+            
+            // Enable connect button since wallet is available
+            connectBtn.disabled = false;
+            updateStatus('Ready to connect', 'info');
+        });
+
+        // Connect button handler
+        connectBtn.addEventListener('click', async () => {
+            try {
+                updateStatus('Connecting to wallet...', 'info');
+                const result = await wallet.connect();
+                
+                console.log('Connection result:', result);
+                
+                if (result.address) {
+                    updateStatus('Wallet connected successfully!', 'success');
+                    
+                    document.getElementById('walletAddress').textContent = result.address;
+                    document.getElementById('walletInfo').style.display = 'block';
+                    enableWalletButtons(true);
+                    noWalletWarning.style.display = 'none';
+                } else {
+                    updateStatus('Failed to get wallet address', 'error');
+                }
+            } catch (error) {
+                console.error('Connection error:', error);
+                if (error.message.includes('No wallet found')) {
+                    noWalletWarning.style.display = 'block';
+                    updateStatus('Please create or import a wallet in Dyphira extension first', 'error');
+                } else {
+                    updateStatus(`Failed to connect: ${error.message}`, 'error');
+                }
+            }
+        });
+
+        // Disconnect button handler
+        disconnectBtn.addEventListener('click', async () => {
+            try {
+                updateStatus('Disconnecting wallet...', 'info');
+                await wallet.disconnect();
+                
+                document.getElementById('walletInfo').style.display = 'none';
+                document.getElementById('walletAddress').textContent = '';
+                document.getElementById('walletBalance').textContent = '0 DYP';
+                enableWalletButtons(false);
+                updateStatus('Wallet disconnected successfully!', 'success');
+            } catch (error) {
+                console.error('Disconnect error:', error);
+                updateStatus(`Failed to disconnect: ${error.message}`, 'error');
+            }
+        });
+
+        // Get balance button handler
+        getBalanceBtn.addEventListener('click', async () => {
+            try {
+                updateStatus('Fetching balance...', 'info');
+                const result = await wallet.getBalance();
+                
+                console.log('Balance result:', result);
+                
+                if (result.error) {
+                    throw new Error(result.error);
+                }
+                
+                document.getElementById('walletBalance').textContent = `${result.balance} DYP`;
+                updateStatus('Balance updated successfully!', 'success');
+            } catch (error) {
+                console.error('Balance error:', error);
+                updateStatus(`Failed to get balance: ${error.message}`, 'error');
+            }
+        });
+
+        // Send transaction handler
+        sendBtn.addEventListener('click', async () => {
+            try {
+                const recipientAddress = document.getElementById('recipientAddress').value.trim();
+                const amount = parseFloat(document.getElementById('amount').value);
+
+                if (!recipientAddress) {
+                    throw new Error('Please enter a recipient address');
+                }
+                if (!amount || amount <= 0) {
+                    throw new Error('Please enter a valid amount');
+                }
+
+                updateStatus('Sending transaction...', 'info');
+                const result = await wallet.sendTransaction({
+                    to: recipientAddress,
+                    amount: amount
+                });
+
+                console.log('Transaction result:', result);
+
+                if (result.error) {
+                    throw new Error(result.error);
+                }
+
+                if (result.hash) {
+                    updateStatus(`Transaction sent successfully! Hash: ${result.hash}`, 'success');
+                    // Clear form
+                    document.getElementById('recipientAddress').value = '';
+                    document.getElementById('amount').value = '';
+                    // Update balance after successful transaction
+                    getBalanceBtn.click();
+                } else {
+                    throw new Error('Transaction failed - no transaction hash received');
+                }
+            } catch (error) {
+                console.error('Transaction error:', error);
+                updateStatus(`Failed to send transaction: ${error.message}`, 'error');
+            }
+        });
+
+        // Initial check for wallet
+        if (window.dyphiraWallet) {
+            console.log('Dyphira wallet detected immediately');
+            wallet = window.dyphiraWallet;
+            connectBtn.disabled = false;
+            updateStatus('Ready to connect', 'info');
+        } else {
+            updateStatus('Waiting for Dyphira wallet...', 'info');
+        }
+    </script>
+</body>
+</html> 

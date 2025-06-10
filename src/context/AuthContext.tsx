@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useChromeStorageLocal } from 'use-chrome-storage';
+import { useChromeStorageLocal, useChromeStorageSession } from 'use-chrome-storage';
 import { hashPassword, verifyPassword, encrypt, decrypt } from '../utils/crypto';
 
 interface AuthContextType {
@@ -29,7 +29,7 @@ export const useAuth = () => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [storedPasswordHash, setStoredPasswordHash] = useChromeStorageLocal<string | null>('walletPasswordHash', null);
-  const [storedSession, setStoredSession] = useChromeStorageLocal<SessionData | null>('session', null);
+  const [storedSession, setStoredSession] = useChromeStorageSession<SessionData | null>('session', null);
   const [masterKey, setMasterKey] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
@@ -45,7 +45,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const now = Date.now();
       if (now > storedSession.expiresAt) {
         // Session expired
-        await setStoredSession(null);
+        setStoredSession(null);
         setIsAuthenticated(false);
         setMasterKey(null);
       } else {
@@ -79,12 +79,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [storedSession]);
 
-  const createSession = async (key: string) => {
+  const createSession = (key: string) => {
     const sessionData: SessionData = {
-      expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes from now
+      expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes from now
       masterKey: key
     };
-    await setStoredSession(sessionData);
+    setStoredSession(sessionData);
     setIsAuthenticated(true);
     setMasterKey(key);
   };
@@ -94,22 +94,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     const isValid = await verifyPassword(password, storedPasswordHash);
     if (isValid) {
-      await createSession(password);
+      createSession(password);
       return true;
     }
     return false;
   };
 
   const logout = async () => {
-    await setStoredSession(null);
+    setStoredSession(null);
     setIsAuthenticated(false);
     setMasterKey(null);
   };
 
   const setInitialPassword = async (password: string) => {
     const hashedPassword = await hashPassword(password);
-    await setStoredPasswordHash(hashedPassword);
-    await createSession(password);
+    setStoredPasswordHash(hashedPassword);
+    createSession(password);
   };
 
   const encryptData = async (data: string): Promise<string> => {

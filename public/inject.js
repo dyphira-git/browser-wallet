@@ -1,5 +1,5 @@
 // Create a unique callback ID generator
-let callbackId = 0;
+let callbackId = 1;
 const callbacks = new Map();
 
 // Define the wallet interface
@@ -44,6 +44,53 @@ window.dyphiraWallet = {
       if (result.address) {
         this.isConnected = true;
         this.address = result.address;
+      }
+
+      return result;
+    } catch (error) {
+      throw error;
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  },
+
+  async disconnect() {
+    if (!this.isConnected) {
+      return { success: true };
+    }
+
+    let timeoutId;
+    try {
+      const result = await Promise.race([
+        new Promise((resolve, reject) => {
+          const id = callbackId++;
+          
+          timeoutId = setTimeout(() => {
+            callbacks.delete(id);
+            reject(new Error('Disconnect request timed out'));
+          }, 30000);
+
+          callbacks.set(id, {
+            resolve: (response) => {
+              clearTimeout(timeoutId);
+              resolve(response);
+            },
+            reject: (error) => {
+              clearTimeout(timeoutId);
+              reject(error);
+            }
+          });
+
+          window.postMessage({
+            type: 'DYPHIRA_DISCONNECT',
+            detail: { callbackId: id }
+          }, '*');
+        })
+      ]);
+
+      if (result.success) {
+        this.isConnected = false;
+        this.address = null;
       }
 
       return result;

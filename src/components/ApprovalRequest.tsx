@@ -7,6 +7,10 @@ import {
   Alert,
   AlertIcon,
   AlertDescription,
+  Input,
+  FormControl,
+  FormLabel,
+  FormErrorMessage,
 } from '@chakra-ui/react';
 
 interface PendingRequest {
@@ -17,10 +21,13 @@ interface PendingRequest {
   to?: string;
   amount?: string;
   address?: string;
+  hasSession?: boolean;
 }
 
 export const ApprovalRequest: React.FC = () => {
   const [request, setRequest] = useState<PendingRequest | null>(null);
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
 
   useEffect(() => {
     // Load the latest request from storage
@@ -34,17 +41,25 @@ export const ApprovalRequest: React.FC = () => {
   const handleResponse = (approved: boolean) => {
     if (!request) return;
 
+    if (approved && request.type === 'connect' && !request.hasSession && !password) {
+      setError('Password is required');
+      return;
+    }
+
     // Get the current wallet data from Chrome storage
     chrome.storage.local.get(['wallet'], ({ wallet }) => {
       chrome.runtime.sendMessage({
         type: 'APPROVAL_RESPONSE',
         requestId: request.id,
         approved,
+        password: approved && !request.hasSession ? password : undefined,
         address: wallet?.address || request.address
       });
 
-      // Clear the request after responding
+      // Clear the request and form state after responding
       setRequest(null);
+      setPassword('');
+      setError('');
     });
   };
 
@@ -68,13 +83,26 @@ export const ApprovalRequest: React.FC = () => {
 
         <Box bg="brand.50" p={4} borderRadius="md">
           {request.type === 'connect' ? (
-            <VStack align="stretch" spacing={2}>
+            <VStack align="stretch" spacing={4}>
               <Text color="brand.800">
                 <strong>{request.origin}</strong> wants to connect to your wallet
               </Text>
-              <Text color="brand.700" fontSize="sm">
-                Wallet Address: {request.address}
-              </Text>
+              {!request.hasSession && (
+                <FormControl isInvalid={!!error}>
+                  <FormLabel color="brand.700">Enter your wallet password</FormLabel>
+                  <Input
+                    type="password"
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setError('');
+                    }}
+                    placeholder="Enter password to unlock wallet"
+                    bg="white"
+                  />
+                  {error && <FormErrorMessage>{error}</FormErrorMessage>}
+                </FormControl>
+              )}
             </VStack>
           ) : (
             <VStack align="stretch" spacing={2}>
@@ -93,7 +121,7 @@ export const ApprovalRequest: React.FC = () => {
             width="full"
             onClick={() => handleResponse(true)}
           >
-            Approve
+            {request.hasSession ? 'Approve (Unlocked)' : 'Approve'}
           </Button>
           <Button
             variant="outline"

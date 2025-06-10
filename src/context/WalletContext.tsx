@@ -9,9 +9,11 @@ interface WalletContextType {
   balance: number;
   address: string | null;
   mnemonic: string[];
+  privateKey: string;
   createWallet: () => Promise<void>;
   importWallet: (privateKeyOrMnemonic: string) => Promise<void>;
   sendTransaction: (to: string, amount: string, fee: string) => Promise<{ hash: string }>;
+  updateBalance: () => Promise<void>;
 }
 
 interface DecryptedWallet {
@@ -36,7 +38,7 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { encryptData, decryptData, isAuthenticated } = useAuth();
   const [storedWallet, setStoredWallet] = useChromeStorageLocal<EncryptedWallet | null>('wallet', null);
-  const [storedBalance, setStoredBalance] = useChromeStorageLocal<number>('balance', 0);
+  const [balance, setBalance] = useState<number>(0);
   
   // In-memory states (cleared on logout/session expiry)
   const [decryptedWallet, setDecryptedWallet] = useState<DecryptedWallet | null>(null);
@@ -76,11 +78,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setLocalMnemonic(wallet.mnemonic);
   };
 
-  const updateBalance = async (walletAddress: string) => {
+  const updateBalance = async (walletAddress?: string) => {
     try {
-      const response = await fetch(`${API_URL}/balance/${walletAddress}`);
+      const addressToUse = walletAddress || decryptedWallet?.address;
+      if (!addressToUse) return;
+      
+      const response = await fetch(`${API_URL}/balance/${addressToUse}`);
       const data: BalanceResponse = await response.json();
-      await setStoredBalance(data.balance);
+      setBalance(data.balance);
     } catch (error) {
       console.error('Error updating balance:', error);
       throw error;
@@ -171,12 +176,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     <WalletContext.Provider 
       value={{ 
         hasWallet: !!storedWallet,
-        balance: storedBalance,
+        balance,
         address: decryptedWallet?.address || null,
         mnemonic: localMnemonic,
+        privateKey: decryptedWallet?.privateKey || '',
         createWallet,
         importWallet,
-        sendTransaction
+        sendTransaction,
+        updateBalance: () => updateBalance()
       }}
     >
       {children}

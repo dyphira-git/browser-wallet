@@ -22,6 +22,8 @@ window.addEventListener('message', async (event) => {
           pendingCallbacks.set(callbackId, { resolve, reject });
         });
 
+        console.log('DYPHIRA_CONNECT', detail);
+
         // Send request to background
         chrome.runtime.sendMessage({ 
           type: 'CONNECT_WALLET',
@@ -44,6 +46,26 @@ window.addEventListener('message', async (event) => {
           type: 'DYPHIRA_CALLBACK',
           callbackId: detail.callbackId,
           response: { error: error.message || 'Connection failed' }
+        }, '*');
+      }
+      break;
+
+    case 'DYPHIRA_DISCONNECT':
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: 'DISCONNECT_SITE',
+          origin: window.location.origin
+        });
+        window.postMessage({
+          type: 'DYPHIRA_CALLBACK',
+          callbackId: detail.callbackId,
+          response: { success: true }
+        }, '*');
+      } catch (error) {
+        window.postMessage({
+          type: 'DYPHIRA_CALLBACK',
+          callbackId: detail.callbackId,
+          response: { error: error.message || 'Disconnect failed' }
         }, '*');
       }
       break;
@@ -96,6 +118,7 @@ window.addEventListener('message', async (event) => {
 
 // Listen for responses from the background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('onMessage', message);
   if (message.type === 'CONNECT_RESPONSE' && message.callbackId) {
     const callback = pendingCallbacks.get(message.callbackId);
     if (callback) {
