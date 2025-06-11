@@ -22,6 +22,7 @@ interface PendingRequest {
   amount?: string;
   address?: string;
   hasSession?: boolean;
+  fee?: string;
 }
 
 export const ApprovalRequest: React.FC = () => {
@@ -41,7 +42,8 @@ export const ApprovalRequest: React.FC = () => {
   const handleResponse = (approved: boolean) => {
     if (!request) return;
 
-    if (approved && request.type === 'connect' && !request.hasSession && !password) {
+    // Check password requirement for both connect and transaction when no session
+    if (approved && !request.hasSession && !password) {
       setError('Password is required');
       return;
     }
@@ -107,10 +109,27 @@ export const ApprovalRequest: React.FC = () => {
           ) : (
             <VStack align="stretch" spacing={2}>
               <Text color="brand.800">
-                <strong>{request.site}</strong> requests a transaction
+                <strong>{request.site || request.origin}</strong> requests a transaction
               </Text>
               <Text color="brand.700">To: {request.to}</Text>
               <Text color="brand.700">Amount: {request.amount} DYP</Text>
+              <Text color="brand.700">Fee: {request.fee} DYP</Text>
+              {!request.hasSession && (
+                <FormControl isInvalid={!!error}>
+                  <FormLabel color="brand.700">Enter your wallet password</FormLabel>
+                  <Input
+                    type="password"
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setError('');
+                    }}
+                    placeholder="Enter password to unlock wallet"
+                    bg="white"
+                  />
+                  {error && <FormErrorMessage>{error}</FormErrorMessage>}
+                </FormControl>
+              )}
             </VStack>
           )}
         </Box>

@@ -101,7 +101,7 @@ window.dyphiraWallet = {
     }
   },
 
-  async sendTransaction(to, amount) {
+  async sendTransaction(to, amount, fee) {
     if (!this.isConnected) {
       throw new Error('Wallet not connected');
     }
@@ -129,7 +129,8 @@ window.dyphiraWallet = {
         detail: {
           callbackId: id,
           to,
-          amount
+          amount,
+          fee
         }
       }, '*');
     });

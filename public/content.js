@@ -76,12 +76,16 @@ window.addEventListener('message', async (event) => {
           type: 'REQUEST_TRANSACTION',
           to: detail.to,
           amount: detail.amount,
+          fee: detail.fee,
           origin: window.location.origin
         });
+
         window.postMessage({
           type: 'DYPHIRA_CALLBACK',
           callbackId: detail.callbackId,
-          response
+          response: response.error ? 
+            { error: response.error } : 
+            { success: true, hash: response.hash }
         }, '*');
       } catch (error) {
         window.postMessage({

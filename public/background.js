@@ -99,11 +99,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'APPROVAL_RESPONSE':
       const pendingRequest = pendingRequests.get(request.requestId);
       if (pendingRequest && pendingRequest.resolver) {
-        pendingRequest.resolver({
-          approved: request.approved,
-          password: request.password,
-          address: request.address
-        });
+        if (pendingRequest.type === 'transaction' && pendingRequest.hasSession) {
+          // For transactions with valid session, we don't need password
+          pendingRequest.resolver({
+            approved: request.approved
+          });
+        } else {
+          // For connections or transactions without session, we need password
+          pendingRequest.resolver({
+            approved: request.approved,
+            password: request.password,
+            address: request.address
+          });
+        }
       }
       pendingRequests.delete(request.requestId);
       return false;
@@ -226,41 +234,42 @@ async function handleTransactionRequest(tabId, origin, request) {
     
     // Check for valid session first
     const sessionPassword = await getValidSession();
-    if (sessionPassword) {
-      // Get wallet data
-      const result = await chrome.storage.local.get(['wallet']);
-      if (!result.wallet || !result.wallet.encryptedData) {
-        throw new Error('No wallet found');
-      }
 
-      try {
-        // Try to decrypt with session password
-        await decryptWalletData(result.wallet.encryptedData, sessionPassword);
-        // If decryption successful, auto-approve the transaction
-        return { success: true };
-      } catch (error) {
-        console.error('Session decryption failed:', error);
-        // If session decryption fails, continue with normal flow
-      }
+    // Get wallet data to verify the connected address
+    const result = await chrome.storage.local.get(['wallet', 'connectedAddresses']);
+    if (!result.wallet || !result.wallet.encryptedData) {
+      throw new Error('No wallet found');
     }
 
-    // If no valid session or session decryption failed, proceed with normal flow
-    const approved = await new Promise((resolve) => {
+    const connectedAddresses = result.connectedAddresses || {};
+    const connectedAddress = connectedAddresses[origin];
+    if (!connectedAddress) {
+      throw new Error('No connected address found for this site');
+    }
+
+    // Always show approval UI, but include session info if available
+    const response = await new Promise((resolve) => {
       pendingRequests.set(requestId, {
         type: 'transaction',
-        site: origin,
+        origin,
         to: request.to,
         amount: request.amount,
-        resolver: resolve
+        fee: request.fee,
+        address: connectedAddress,
+        resolver: resolve,
+        hasSession: !!sessionPassword
       });
 
       chrome.storage.local.set({
         latestRequest: {
           id: requestId,
           type: 'transaction',
-          site: origin,
+          origin,
           to: request.to,
-          amount: request.amount
+          amount: request.amount,
+          fee: request.fee,
+          address: connectedAddress,
+          hasSession: !!sessionPassword
         }
       });
 
@@ -270,11 +279,52 @@ async function handleTransactionRequest(tabId, origin, request) {
 
     chrome.action.setBadgeText({ text: '' });
 
-    if (!approved) {
+    if (!response.approved) {
       return { error: 'User rejected transaction' };
     }
 
-    return { success: true };
+    // If we have a session, use the session password, otherwise use the provided password
+    const password = sessionPassword || response.password;
+    if (!password) {
+      throw new Error('No password provided');
+    }
+
+    try {
+      // Decrypt wallet data to get private key
+      const wallet = await decryptWalletData(result.wallet.encryptedData, password);
+      if (!wallet || !wallet.privateKey) {
+        throw new Error('Invalid wallet data');
+      }
+
+      // Execute the actual transaction
+      const txResponse = await fetch(`${API_URL}/transaction`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: connectedAddress,
+          to: request.to,
+          amount: parseFloat(request.amount),
+          fee: parseFloat(request.fee),
+          private_key: wallet.privateKey
+        }),
+      });
+
+      if (!txResponse.ok) {
+        const error = await txResponse.json();
+        throw new Error(error.message || 'Transaction failed');
+      }
+
+      const txData = await txResponse.json();
+      return { 
+        success: true,
+        hash: txData.hash
+      };
+    } catch (error) {
+      console.error('Transaction failed:', error);
+      return { error: error.message || 'Transaction failed' };
+    }
   } catch (error) {
     console.error('Transaction error:', error);
     chrome.action.setBadgeText({ text: '' });
